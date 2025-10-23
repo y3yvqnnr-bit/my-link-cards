@@ -1,56 +1,173 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <title>My Link Cards</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    body {
-      font-family: sans-serif;
-      max-width: 600px;
-      margin: 40px auto;
-      padding: 0 20px;
-      line-height: 1.6;
-      text-align: center;
-    }
-    h1 {
-      font-size: 1.8em;
-      margin-bottom: 20px;
-    }
-    ul {
-      list-style: none;
-      padding: 0;
-    }
-    li {
-      margin: 12px 0;
-    }
-    a {
-      text-decoration: none;
-      color: #0366d6;
-      font-weight: bold;
-    }
-    a:hover {
-      text-decoration: underline;
-    }
-    footer {
-      margin-top: 40px;
-      font-size: 0.9em;
-      color: gray;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Xリンクカードジェネレーター（大画像リンク版）</title>
+<style>
+  body { font-family: sans-serif; margin: 20px; background: #f9f9f9; }
+  h1 { text-align: center; }
+  .container { display: flex; gap: 20px; flex-wrap: wrap; }
+  .form-box, .preview-box { flex: 1; min-width: 320px; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1);}
+  input, textarea { width: 100%; padding: 8px; margin: 8px 0; border-radius: 4px; border: 1px solid #ccc; }
+  button { padding: 10px 20px; margin-top: 10px; border: none; background: #1da1f2; color: white; border-radius: 4px; cursor: pointer; }
+  button:hover { background: #0d95e8; }
+  #drop-area { border: 2px dashed #ccc; border-radius: 8px; padding: 20px; text-align: center; margin: 10px 0; cursor: pointer; }
+  #drop-area.hover { border-color: #1da1f2; }
+
+  /* Xカード風プレビュー */
+  .x-card {
+    display: flex;
+    flex-direction: column; /* 画像大きくするため縦型 */
+    border: 1px solid #e1e8ed;
+    border-radius: 8px;
+    overflow: hidden;
+    max-width: 500px;
+    background: #fff;
+    cursor: pointer;
+    transition: box-shadow 0.2s;
+    text-decoration: none; /* aタグでも文字下線消す */
+    color: inherit;
+  }
+  .x-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+  .x-card img { width: 100%; height: auto; display: block; object-fit: cover; }
+  .x-card-content { padding: 10px; display: flex; flex-direction: column; }
+  .x-card-content h4 { margin: 0; font-size: 16px; color: #0f1419; }
+  .x-card-content p { margin: 5px 0 0; font-size: 14px; color: #536471; line-height: 1.3; }
+  .x-card-content a { margin-top: 5px; font-size: 12px; color: #1da1f2; text-decoration: none; }
+</style>
 </head>
 <body>
-  <h1>My Link Cards</h1>
-  <p>テスト用リンクカードの一覧ページです。</p>
 
-  <ul>
-    <li><a href="card_test.html">テストページ</a></li>
-    <li><a href="card_sample.html">サンプルカード</a></li>
-    <!-- 必要に応じてここに追加 -->
-  </ul>
+<h1>Xリンクカードジェネレーター（大画像リンク版）</h1>
+<div class="container">
+  <div class="form-box">
+    <label>タイトル</label>
+    <input type="text" id="title" placeholder="カードタイトル">
+    
+    <label>説明文</label>
+    <textarea id="description" rows="3" placeholder="カード説明文"></textarea>
+    
+    <label>リンクURL</label>
+    <input type="text" id="url" placeholder="https://example.com">
+    
+    <label>画像アップロード</label>
+    <div id="drop-area">ここに画像をドラッグ＆ドロップ、またはクリックして選択</div>
+    <input type="file" id="fileElem" accept="image/*" style="display:none">
+    
+    <button onclick="generateHTML()">HTML生成＆プレビュー</button>
+    <button onclick="downloadHTML()">HTMLダウンロード</button>
+  </div>
 
-  <footer>
-    &copy; 2025 My Link Cards
-  </footer>
+  <div class="preview-box">
+    <h2>プレビュー</h2>
+    <div id="preview">
+      <p>ここにXリンクカード風のプレビューが表示されます</p>
+    </div>
+  </div>
+</div>
+
+<script>
+let base64Image = '';
+
+const dropArea = document.getElementById('drop-area');
+const fileElem = document.getElementById('fileElem');
+
+dropArea.addEventListener('click', () => fileElem.click());
+dropArea.addEventListener('dragover', (e) => { e.preventDefault(); dropArea.classList.add('hover'); });
+dropArea.addEventListener('dragleave', () => dropArea.classList.remove('hover'));
+dropArea.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropArea.classList.remove('hover');
+  const file = e.dataTransfer.files[0];
+  handleFile(file);
+});
+
+fileElem.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  handleFile(file);
+});
+
+function handleFile(file) {
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    base64Image = e.target.result;
+    updatePreview();
+  };
+  reader.readAsDataURL(file);
+}
+
+function updatePreview() {
+  const title = document.getElementById('title').value;
+  const description = document.getElementById('description').value;
+  const url = document.getElementById('url').value;
+
+  if (!base64Image) return;
+
+  document.getElementById('preview').innerHTML = `
+    <a class="x-card" href="${url}" target="_blank">
+      <img src="${base64Image}" alt="画像プレビュー">
+      <div class="x-card-content">
+        <h4>${title}</h4>
+        <p>${description}</p>
+        <span>${url}</span>
+      </div>
+    </a>
+  `;
+}
+
+function generateHTML() {
+  const title = document.getElementById('title').value;
+  const description = document.getElementById('description').value;
+  const url = document.getElementById('url').value;
+
+  if (!base64Image) {
+    alert("画像をアップロードしてください");
+    return;
+  }
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${title}</title>
+<meta property="og:title" content="${title}">
+<meta property="og:description" content="${description}">
+<meta property="og:image" content="${base64Image}">
+<meta property="og:url" content="${url}">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a href="${url}" target="_blank">
+  <img src="${base64Image}" alt="リンクカード画像" style="width:100%;height:auto;">
+</a>
+<h1>${title}</h1>
+<p>${description}</p>
+<p><a href="${url}" target="_blank">${url}</a></p>
+</body>
+</html>
+`;
+
+  window.generatedHTML = htmlContent;
+  updatePreview();
+}
+
+function downloadHTML() {
+  if (!window.generatedHTML) {
+    alert("まずはHTML生成ボタンを押してください");
+    return;
+  }
+  const blob = new Blob([window.generatedHTML], { type: "text/html" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "link_card.html";
+  a.click();
+}
+</script>
+
 </body>
 </html>
