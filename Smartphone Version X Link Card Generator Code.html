@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>スマホ対応 Xリンクカードジェネレーター</title>
+<style>
+body { font-family:sans-serif; padding:10px; background:#f8f8f8; }
+h1 { text-align:center; font-size:1.2em; margin-bottom:10px; }
+.container { display:flex; flex-direction:column; gap:10px; }
+.form-box, .preview-box { background:#fff; padding:10px; border-radius:6px; }
+input, textarea, button { width:100%; padding:10px; margin:5px 0; border-radius:5px; border:1px solid #ccc; font-size:16px; }
+button { background:#1da1f2; color:#fff; border:none; }
+#drop-area { border:2px dashed #ccc; padding:15px; text-align:center; border-radius:5px; cursor:pointer; }
+#drop-area.hover { border-color:#1da1f2; }
+#completedURL, #errorMsg { font-size:14px; word-break:break-all; margin-top:5px; }
+#completedURL { color:#1da1f2; }
+#errorMsg { color:red; }
+.x-card img { width:100%; height:auto; display:block; border-radius:6px; margin-bottom:5px; }
+</style>
+</head>
+<body>
+
+<h1>スマホ対応 Xリンクカードジェネレーター</h1>
+<div class="container">
+  <div class="form-box">
+    <input type="text" id="title" placeholder="カードタイトル" value="サンプルタイトル">
+    <textarea id="description" placeholder="カード説明文">サンプル説明文です</textarea>
+    <input type="text" id="url" placeholder="https://example.com" value="https://example.com">
+    <input type="text" id="githubToken" placeholder="GitHub PAT">
+    <input type="text" id="repo" value="y3yvqnnr-bit/my-link-cards">
+    <input type="text" id="branch" value="gh-pages">
+    <div id="drop-area">画像をタップして選択</div>
+    <input type="file" id="fileElem" accept="image/*" style="display:none">
+    <button onclick="savePAT(); uploadAndGenerate();">アップロード & HTML生成</button>
+    <div id="completedURL"></div>
+    <div id="errorMsg"></div>
+  </div>
+
+  <div class="preview-box">
+    <div id="preview"><p>ここにプレビューが表示されます</p></div>
+  </div>
+</div>
+
+<script>
+let base64Image='', selectedFile=null;
+const dropArea = document.getElementById('drop-area');
+const fileElem = document.getElementById('fileElem');
+
+// PAT 自動セット
+document.addEventListener("DOMContentLoaded", ()=>{
+  const saved = localStorage.getItem("githubPAT");
+  if(saved) document.getElementById("githubToken").value = saved;
+});
+function savePAT(){ const pat=document.getElementById("githubToken").value; if(pat) localStorage.setItem("githubPAT",pat); }
+
+dropArea.addEventListener('click',()=>fileElem.click());
+dropArea.addEventListener('dragover', e=>{ e.preventDefault(); dropArea.classList.add('hover'); });
+dropArea.addEventListener('dragleave',()=>dropArea.classList.remove('hover'));
+dropArea.addEventListener('drop', e=>{ e.preventDefault(); dropArea.classList.remove('hover'); selectedFile=e.dataTransfer.files[0]; handleFile(selectedFile); });
+fileElem.addEventListener('change', e=>{ selectedFile=e.target.files[0]; handleFile(selectedFile); });
+
+function handleFile(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{ base64Image=e.target.result; updatePreview(); };
+  reader.readAsDataURL(file);
+}
+
+function updatePreview(imageUrl){
+  const title=document.getElementById('title').value;
+  const description=document.getElementById('description').value;
+  const url=document.getElementById('url').value;
+  const imgSrc=imageUrl||base64Image;
+  if(!imgSrc) return;
+  document.getElementById('preview').innerHTML=`
+    <div class="x-card">
+      <img src="${imgSrc}" alt="プレビュー画像">
+      <strong>${title}</strong>
+      <p>${description}</p>
+      <small>${url}</small>
+    </div>
+  `;
+}
+
+async function uploadAndGenerate(){
+  const title=document.getElementById('title').value;
+  const description=document.getElementById('description').value;
+  const url=document.getElementById('url').value;
+  const token=document.getElementById('githubToken').value;
+  const repo=document.getElementById('repo').value;
+  const branch=document.getElementById('branch').value;
+  const errorDiv=document.getElementById('errorMsg');
+  errorDiv.innerHTML='';
+  if(!selectedFile){ alert("画像を選択してください"); return; }
+  if(!token||!repo){ alert("GitHub情報を入力してください"); return; }
+
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    const content=e.target.result.split(',')[1];
+    const ts=Date.now();
+    const ext=selectedFile.name.split('.').pop();
+    const fileName=`img_${ts}.${ext}`;
+    const htmlFileName=`card_${ts}.html`;
+    const parts=repo.split('/');
+    const apiBase=`https://api.github.com/repos/${repo}/contents`;
+
+    try{
+      // 画像アップロード
+      const imgRes=await fetch(`${apiBase}/${fileName}`,{ method:'PUT', headers:{ 'Authorization':`token ${token}`, 'Content-Type':'application/json' }, body:JSON.stringify({message:`Add ${fileName}`, content:content, branch:branch})});
+      const imgData=await imgRes.json();
+      if(imgData.message){ errorDiv.innerHTML=`画像アップロード失敗: ${imgData.message}`; return; }
+      const imageUrl=`https://${parts[0]}.github.io/${parts[1]}/${fileName}`;
+
+      // HTML生成
+      const htmlContent=`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:image" content="${imageUrl}"><meta property="og:url" content="${url}"><meta name="twitter:card" content="summary_large_image"><title>${title}</title></head><body><a href="${url}" target="_blank"><img src="${imageUrl}" style="width:100%;height:auto;"></a><h1>${title}</h1><p>${description}</p><p><a href="${url}" target="_blank">${url}</a></p></body></html>`;
+
+      const htmlRes=await fetch(`${apiBase}/${htmlFileName}`,{ method:'PUT', headers:{ 'Authorization':`token ${token}`, 'Content-Type':'application/json' }, body:JSON.stringify({message:`Add ${htmlFileName}`, content:btoa(unescape(encodeURIComponent(htmlContent))), branch:branch})});
+      const htmlData=await htmlRes.json();
+      if(htmlData.message){ errorDiv.innerHTML=`HTMLアップロード失敗: ${htmlData.message}`; return; }
+
+      const ghUrl=`https://${parts[0]}.github.io/${parts[1]}/${htmlFileName}`;
+      document.getElementById('completedURL').innerHTML=`完成URL: <a href="${ghUrl}" target="_blank">${ghUrl}</a>`;
+      updatePreview(imageUrl);
+
+    }catch(err){ console.error(err); errorDiv.innerHTML=`アップロード中にエラーが発生しました: ${err}`; }
+  };
+  reader.readAsDataURL(selectedFile);
+}
+</script>
+</body>
+</html>
